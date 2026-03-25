@@ -1,0 +1,534 @@
+using System;
+using System.Collections.Generic;
+using System.ComponentModel;
+using System.Linq;
+using OFT.Attributes;
+using OFT.Rendering.Context;
+using ATAS.Indicators;
+using ATAS.Indicators.Technical;
+
+namespace CustomIndicators
+{
+    [DisplayName("TR Sessions Core Port")]
+    [Description("Port parcial desde TradingView a ATAS. Incluye EMA, nube EMA, pivots, M-levels, high/low previos, ADR/RD/RW y daily open.")]
+    public class TRSessionsCorePort : Indicator
+    {
+        #region Parámetros
+
+        [Display(Name = "Mostrar EMA 5", GroupName = "EMAs", Order = 10)]
+        public bool ShowEma5 { get; set; } = true;
+
+        [Display(Name = "Mostrar EMA 13", GroupName = "EMAs", Order = 20)]
+        public bool ShowEma13 { get; set; } = true;
+
+        [Display(Name = "Mostrar EMA 50", GroupName = "EMAs", Order = 30)]
+        public bool ShowEma50 { get; set; } = true;
+
+        [Display(Name = "Mostrar EMA 200", GroupName = "EMAs", Order = 40)]
+        public bool ShowEma200 { get; set; } = true;
+
+        [Display(Name = "Mostrar EMA 800", GroupName = "EMAs", Order = 50)]
+        public bool ShowEma800 { get; set; } = true;
+
+        [Display(Name = "Mostrar nube EMA 50", GroupName = "EMAs", Order = 60)]
+        public bool ShowEmaCloud { get; set; } = true;
+
+        [Display(Name = "Mostrar pivots nivel 1", GroupName = "Pivots", Order = 100)]
+        public bool ShowLevelOnePivotPoints { get; set; } = false;
+
+        [Display(Name = "Mostrar pivots nivel 2", GroupName = "Pivots", Order = 110)]
+        public bool ShowLevelTwoPivotPoints { get; set; } = false;
+
+        [Display(Name = "Mostrar pivots nivel 3", GroupName = "Pivots", Order = 120)]
+        public bool ShowLevelThreePivotPoints { get; set; } = false;
+
+        [Display(Name = "Mostrar niveles M", GroupName = "Pivots", Order = 130)]
+        public bool ShowMLevels { get; set; } = true;
+
+        [Display(Name = "Mostrar high/low día previo", GroupName = "Previos", Order = 200)]
+        public bool ShowPreviousDayHighLow { get; set; } = true;
+
+        [Display(Name = "Mostrar high/low semana previa", GroupName = "Previos", Order = 210)]
+        public bool ShowPreviousWeekHighLow { get; set; } = true;
+
+        [Display(Name = "Mostrar ADR", GroupName = "ADR/RD/RW", Order = 300)]
+        public bool ShowADR { get; set; } = true;
+
+        [Display(Name = "ADR desde apertura diaria", GroupName = "ADR/RD/RW", Order = 310)]
+        public bool ShowADRDO { get; set; } = false;
+
+        [Display(Name = "ADR días", GroupName = "ADR/RD/RW", Order = 320)]
+        public int ADRLength { get; set; } = 14;
+
+        [Display(Name = "Mostrar RD", GroupName = "ADR/RD/RW", Order = 330)]
+        public bool ShowRD { get; set; } = false;
+
+        [Display(Name = "RD desde apertura diaria", GroupName = "ADR/RD/RW", Order = 340)]
+        public bool ShowRDDO { get; set; } = false;
+
+        [Display(Name = "RD días", GroupName = "ADR/RD/RW", Order = 350)]
+        public int RDLength { get; set; } = 15;
+
+        [Display(Name = "Mostrar RW", GroupName = "ADR/RD/RW", Order = 360)]
+        public bool ShowRW { get; set; } = false;
+
+        [Display(Name = "RW desde apertura semanal", GroupName = "ADR/RD/RW", Order = 370)]
+        public bool ShowRWWO { get; set; } = false;
+
+        [Display(Name = "RW semanas", GroupName = "ADR/RD/RW", Order = 380)]
+        public int RWLength { get; set; } = 13;
+
+        [Display(Name = "Mostrar apertura diaria", GroupName = "Daily Open", Order = 400)]
+        public bool ShowDailyOpen { get; set; } = true;
+
+        #endregion
+
+        #region Series
+
+        private readonly ValueDataSeries _ema5 = new("EMA5") { VisualType = VisualMode.Line };
+        private readonly ValueDataSeries _ema13 = new("EMA13") { VisualType = VisualMode.Line };
+        private readonly ValueDataSeries _ema50 = new("EMA50") { VisualType = VisualMode.Line };
+        private readonly ValueDataSeries _ema200 = new("EMA200") { VisualType = VisualMode.Line };
+        private readonly ValueDataSeries _ema800 = new("EMA800") { VisualType = VisualMode.Line };
+
+        private readonly ValueDataSeries _ema50CloudUpper = new("EMA50CloudUpper") { VisualType = VisualMode.Line };
+        private readonly ValueDataSeries _ema50CloudLower = new("EMA50CloudLower") { VisualType = VisualMode.Line };
+
+        private readonly ValueDataSeries _pivot = new("PP") { VisualType = VisualMode.Line };
+        private readonly ValueDataSeries _r1 = new("R1") { VisualType = VisualMode.Line };
+        private readonly ValueDataSeries _s1 = new("S1") { VisualType = VisualMode.Line };
+        private readonly ValueDataSeries _r2 = new("R2") { VisualType = VisualMode.Line };
+        private readonly ValueDataSeries _s2 = new("S2") { VisualType = VisualMode.Line };
+        private readonly ValueDataSeries _r3 = new("R3") { VisualType = VisualMode.Line };
+        private readonly ValueDataSeries _s3 = new("S3") { VisualType = VisualMode.Line };
+
+        private readonly ValueDataSeries _m0 = new("M0") { VisualType = VisualMode.Line };
+        private readonly ValueDataSeries _m1 = new("M1") { VisualType = VisualMode.Line };
+        private readonly ValueDataSeries _m2 = new("M2") { VisualType = VisualMode.Line };
+        private readonly ValueDataSeries _m3 = new("M3") { VisualType = VisualMode.Line };
+        private readonly ValueDataSeries _m4 = new("M4") { VisualType = VisualMode.Line };
+        private readonly ValueDataSeries _m5 = new("M5") { VisualType = VisualMode.Line };
+
+        private readonly ValueDataSeries _prevDayHigh = new("PrevDayHigh") { VisualType = VisualMode.Line };
+        private readonly ValueDataSeries _prevDayLow = new("PrevDayLow") { VisualType = VisualMode.Line };
+        private readonly ValueDataSeries _prevWeekHigh = new("PrevWeekHigh") { VisualType = VisualMode.Line };
+        private readonly ValueDataSeries _prevWeekLow = new("PrevWeekLow") { VisualType = VisualMode.Line };
+
+        private readonly ValueDataSeries _adrHigh = new("ADRHigh") { VisualType = VisualMode.Line };
+        private readonly ValueDataSeries _adrLow = new("ADRLow") { VisualType = VisualMode.Line };
+
+        private readonly ValueDataSeries _rdHigh = new("RDHigh") { VisualType = VisualMode.Line };
+        private readonly ValueDataSeries _rdLow = new("RDLow") { VisualType = VisualMode.Line };
+
+        private readonly ValueDataSeries _rwHigh = new("RWHigh") { VisualType = VisualMode.Line };
+        private readonly ValueDataSeries _rwLow = new("RWLow") { VisualType = VisualMode.Line };
+
+        private readonly ValueDataSeries _dailyOpen = new("DailyOpen") { VisualType = VisualMode.Line };
+
+        #endregion
+
+        #region Estado interno
+
+        private readonly EMA _ema5Calc = new() { Period = 5 };
+        private readonly EMA _ema13Calc = new() { Period = 13 };
+        private readonly EMA _ema50Calc = new() { Period = 50 };
+        private readonly EMA _ema200Calc = new() { Period = 200 };
+        private readonly EMA _ema800Calc = new() { Period = 800 };
+
+        private readonly Queue<decimal> _stdevWindow = new();
+        private const int CloudStdevLength = 100;
+
+        private readonly List<DailyBar> _days = new();
+        private readonly List<WeeklyBar> _weeks = new();
+
+        private DateTime _currentDay = DateTime.MinValue;
+        private DailyBar _workingDay;
+
+        private int _currentWeekKey = int.MinValue;
+        private WeeklyBar _workingWeek;
+
+        #endregion
+
+        public TRSessionsCorePort()
+        {
+            DataSeries[0] = _ema5;
+            DataSeries.Add(_ema13);
+            DataSeries.Add(_ema50);
+            DataSeries.Add(_ema200);
+            DataSeries.Add(_ema800);
+            DataSeries.Add(_ema50CloudUpper);
+            DataSeries.Add(_ema50CloudLower);
+
+            DataSeries.Add(_pivot);
+            DataSeries.Add(_r1);
+            DataSeries.Add(_s1);
+            DataSeries.Add(_r2);
+            DataSeries.Add(_s2);
+            DataSeries.Add(_r3);
+            DataSeries.Add(_s3);
+
+            DataSeries.Add(_m0);
+            DataSeries.Add(_m1);
+            DataSeries.Add(_m2);
+            DataSeries.Add(_m3);
+            DataSeries.Add(_m4);
+            DataSeries.Add(_m5);
+
+            DataSeries.Add(_prevDayHigh);
+            DataSeries.Add(_prevDayLow);
+            DataSeries.Add(_prevWeekHigh);
+            DataSeries.Add(_prevWeekLow);
+
+            DataSeries.Add(_adrHigh);
+            DataSeries.Add(_adrLow);
+            DataSeries.Add(_rdHigh);
+            DataSeries.Add(_rdLow);
+            DataSeries.Add(_rwHigh);
+            DataSeries.Add(_rwLow);
+
+            DataSeries.Add(_dailyOpen);
+
+            DenyToChangePanel = true;
+            EnableCustomDrawing = false;
+        }
+
+        protected override void OnCalculate(int bar, decimal value)
+        {
+            var candle = GetCandle(bar);
+            if (candle == null)
+                return;
+
+            UpdateDayState(bar, candle);
+            UpdateWeekState(bar, candle);
+            UpdateEmas(bar, candle);
+            UpdatePivotLevels(bar);
+            UpdatePreviousHighLows(bar);
+            UpdateAdrRdRw(bar);
+            UpdateDailyOpen(bar);
+        }
+
+        #region Cálculo EMA
+
+        private void UpdateEmas(int bar, IndicatorCandle candle)
+        {
+            _ema5Calc.Calculate(bar, candle.Close);
+            _ema13Calc.Calculate(bar, candle.Close);
+            _ema50Calc.Calculate(bar, candle.Close);
+            _ema200Calc.Calculate(bar, candle.Close);
+            _ema800Calc.Calculate(bar, candle.Close);
+
+            _ema5[bar] = ShowEma5 ? _ema5Calc[bar] : 0m;
+            _ema13[bar] = ShowEma13 ? _ema13Calc[bar] : 0m;
+            _ema50[bar] = ShowEma50 ? _ema50Calc[bar] : 0m;
+            _ema200[bar] = ShowEma200 ? _ema200Calc[bar] : 0m;
+            _ema800[bar] = ShowEma800 ? _ema800Calc[bar] : 0m;
+
+            _stdevWindow.Enqueue(candle.Close);
+            if (_stdevWindow.Count > CloudStdevLength)
+                _stdevWindow.Dequeue();
+
+            if (_stdevWindow.Count >= 2 && ShowEmaCloud)
+            {
+                var stdev = StdDev(_stdevWindow);
+                var cloudSize = stdev / 4m;
+                _ema50CloudUpper[bar] = _ema50Calc[bar] + cloudSize;
+                _ema50CloudLower[bar] = _ema50Calc[bar] - cloudSize;
+            }
+            else
+            {
+                _ema50CloudUpper[bar] = 0m;
+                _ema50CloudLower[bar] = 0m;
+            }
+        }
+
+        #endregion
+
+        #region Pivots y niveles M
+
+        private void UpdatePivotLevels(int bar)
+        {
+            if (_days.Count < 1)
+                return;
+
+            var prev = _days.Last();
+
+            var pp = (prev.High + prev.Low + prev.Close) / 3m;
+            var r1 = 2m * pp - prev.Low;
+            var s1 = 2m * pp - prev.High;
+            var r2 = pp - s1 + r1;
+            var s2 = pp - r1 + s1;
+            var r3 = 2m * pp + prev.High - 2m * prev.Low;
+            var s3 = 2m * pp - (2m * prev.High - prev.Low);
+
+            _pivot[bar] = (ShowLevelOnePivotPoints || ShowLevelTwoPivotPoints || ShowLevelThreePivotPoints || ShowMLevels) ? pp : 0m;
+            _r1[bar] = ShowLevelOnePivotPoints ? r1 : 0m;
+            _s1[bar] = ShowLevelOnePivotPoints ? s1 : 0m;
+            _r2[bar] = ShowLevelTwoPivotPoints ? r2 : 0m;
+            _s2[bar] = ShowLevelTwoPivotPoints ? s2 : 0m;
+            _r3[bar] = ShowLevelThreePivotPoints ? r3 : 0m;
+            _s3[bar] = ShowLevelThreePivotPoints ? s3 : 0m;
+
+            if (ShowMLevels)
+            {
+                _m0[bar] = (s2 + s3) / 2m;
+                _m1[bar] = (s1 + s2) / 2m;
+                _m2[bar] = (pp + s1) / 2m;
+                _m3[bar] = (pp + r1) / 2m;
+                _m4[bar] = (r1 + r2) / 2m;
+                _m5[bar] = (r2 + r3) / 2m;
+            }
+            else
+            {
+                _m0[bar] = _m1[bar] = _m2[bar] = _m3[bar] = _m4[bar] = _m5[bar] = 0m;
+            }
+        }
+
+        #endregion
+
+        #region High/Low previos
+
+        private void UpdatePreviousHighLows(int bar)
+        {
+            if (_days.Count > 0)
+            {
+                var prevDay = _days.Last();
+                _prevDayHigh[bar] = ShowPreviousDayHighLow ? prevDay.High : 0m;
+                _prevDayLow[bar] = ShowPreviousDayHighLow ? prevDay.Low : 0m;
+            }
+
+            if (_weeks.Count > 0)
+            {
+                var prevWeek = _weeks.Last();
+                _prevWeekHigh[bar] = ShowPreviousWeekHighLow ? prevWeek.High : 0m;
+                _prevWeekLow[bar] = ShowPreviousWeekHighLow ? prevWeek.Low : 0m;
+            }
+        }
+
+        #endregion
+
+        #region ADR / RD / RW
+
+        private void UpdateAdrRdRw(int bar)
+        {
+            if (_days.Count >= 1)
+            {
+                var adr = AverageRangeDays(ADRLength);
+                var rd = AverageRangeDays(RDLength);
+
+                if (ShowADR && adr > 0m)
+                {
+                    var current = _workingDay;
+                    var baseHigh = ShowADRDO ? current.Open : current.Low;
+                    var baseLow = ShowADRDO ? current.Open : current.High;
+
+                    _adrHigh[bar] = ShowADRDO ? current.Open + adr : baseHigh + adr;
+                    _adrLow[bar] = ShowADRDO ? current.Open - adr : baseLow - adr;
+                }
+                else
+                {
+                    _adrHigh[bar] = 0m;
+                    _adrLow[bar] = 0m;
+                }
+
+                if (ShowRD && rd > 0m)
+                {
+                    var current = _workingDay;
+                    _rdHigh[bar] = ShowRDDO ? current.Open + rd : current.Low + rd;
+                    _rdLow[bar] = ShowRDDO ? current.Open - rd : current.High - rd;
+                }
+                else
+                {
+                    _rdHigh[bar] = 0m;
+                    _rdLow[bar] = 0m;
+                }
+            }
+
+            if (_weeks.Count >= 1)
+            {
+                var rw = AverageRangeWeeks(RWLength);
+
+                if (ShowRW && rw > 0m)
+                {
+                    var current = _workingWeek;
+                    _rwHigh[bar] = ShowRWWO ? current.Open + rw : current.Low + rw;
+                    _rwLow[bar] = ShowRWWO ? current.Open - rw : current.High - rw;
+                }
+                else
+                {
+                    _rwHigh[bar] = 0m;
+                    _rwLow[bar] = 0m;
+                }
+            }
+        }
+
+        #endregion
+
+        #region Daily open
+
+        private void UpdateDailyOpen(int bar)
+        {
+            _dailyOpen[bar] = ShowDailyOpen ? _workingDay.Open : 0m;
+        }
+
+        #endregion
+
+        #region Estado día/semana
+
+        private void UpdateDayState(int bar, IndicatorCandle candle)
+        {
+            var time = candle.Time.Date;
+
+            if (_currentDay == DateTime.MinValue)
+            {
+                _currentDay = time;
+                _workingDay = new DailyBar
+                {
+                    Date = time,
+                    Open = candle.Open,
+                    High = candle.High,
+                    Low = candle.Low,
+                    Close = candle.Close
+                };
+                return;
+            }
+
+            if (time != _currentDay)
+            {
+                _days.Add(_workingDay);
+                _currentDay = time;
+
+                _workingDay = new DailyBar
+                {
+                    Date = time,
+                    Open = candle.Open,
+                    High = candle.High,
+                    Low = candle.Low,
+                    Close = candle.Close
+                };
+
+                TrimList(_days, 100);
+            }
+            else
+            {
+                _workingDay.High = Math.Max(_workingDay.High, candle.High);
+                _workingDay.Low = Math.Min(_workingDay.Low, candle.Low);
+                _workingDay.Close = candle.Close;
+            }
+        }
+
+        private void UpdateWeekState(int bar, IndicatorCandle candle)
+        {
+            var dt = candle.Time;
+            var weekKey = GetWeekKey(dt);
+
+            if (_currentWeekKey == int.MinValue)
+            {
+                _currentWeekKey = weekKey;
+                _workingWeek = new WeeklyBar
+                {
+                    WeekKey = weekKey,
+                    Open = candle.Open,
+                    High = candle.High,
+                    Low = candle.Low,
+                    Close = candle.Close
+                };
+                return;
+            }
+
+            if (weekKey != _currentWeekKey)
+            {
+                _weeks.Add(_workingWeek);
+                _currentWeekKey = weekKey;
+
+                _workingWeek = new WeeklyBar
+                {
+                    WeekKey = weekKey,
+                    Open = candle.Open,
+                    High = candle.High,
+                    Low = candle.Low,
+                    Close = candle.Close
+                };
+
+                TrimList(_weeks, 100);
+            }
+            else
+            {
+                _workingWeek.High = Math.Max(_workingWeek.High, candle.High);
+                _workingWeek.Low = Math.Min(_workingWeek.Low, candle.Low);
+                _workingWeek.Close = candle.Close;
+            }
+        }
+
+        #endregion
+
+        #region Utilidades
+
+        private decimal AverageRangeDays(int length)
+        {
+            if (_days.Count == 0)
+                return 0m;
+
+            var count = Math.Min(length, _days.Count);
+            return _days.Skip(Math.Max(0, _days.Count - count))
+                .Average(x => (double)(x.High - x.Low)) is var avg
+                ? (decimal)avg
+                : 0m;
+        }
+
+        private decimal AverageRangeWeeks(int length)
+        {
+            if (_weeks.Count == 0)
+                return 0m;
+
+            var count = Math.Min(length, _weeks.Count);
+            return _weeks.Skip(Math.Max(0, _weeks.Count - count))
+                .Average(x => (double)(x.High - x.Low)) is var avg
+                ? (decimal)avg
+                : 0m;
+        }
+
+        private static decimal StdDev(IEnumerable<decimal> values)
+        {
+            var data = values.Select(v => (double)v).ToArray();
+            if (data.Length == 0)
+                return 0m;
+
+            var mean = data.Average();
+            var variance = data.Sum(x => Math.Pow(x - mean, 2)) / data.Length;
+            return (decimal)Math.Sqrt(variance);
+        }
+
+        private static int GetWeekKey(DateTime dt)
+        {
+            var cal = System.Globalization.CultureInfo.InvariantCulture.Calendar;
+            var week = cal.GetWeekOfYear(dt, System.Globalization.CalendarWeekRule.FirstFourDayWeek, DayOfWeek.Monday);
+            return dt.Year * 100 + week;
+        }
+
+        private static void TrimList<T>(List<T> list, int max)
+        {
+            while (list.Count > max)
+                list.RemoveAt(0);
+        }
+
+        private sealed class DailyBar
+        {
+            public DateTime Date;
+            public decimal Open;
+            public decimal High;
+            public decimal Low;
+            public decimal Close;
+        }
+
+        private sealed class WeeklyBar
+        {
+            public int WeekKey;
+            public decimal Open;
+            public decimal High;
+            public decimal Low;
+            public decimal Close;
+        }
+
+        #endregion
+    }
+}

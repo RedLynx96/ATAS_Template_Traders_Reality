@@ -1,0 +1,31 @@
+{
+  "runtimeTarget": {
+    "name": ".NETCoreApp,Version=v10.0",
+    "signature": ""
+  },
+  "compilationOptions": {},
+  "targets": {
+    ".NETCoreApp,Version=v10.0": {
+      "CustomIndicatorsEma/1.0.0": {
+        "runtime": {
+          "CustomIndicatorsEma.dll": {}
+        },
+        "resources": {
+          "de-de/CustomIndicatorsEma.resources.dll": {
+            "locale": "de-de"
+          },
+          "ru-ru/CustomIndicatorsEma.resources.dll": {
+            "locale": "ru-ru"
+          }
+        }
+      }
+    }
+  },
+  "libraries": {
+    "CustomIndicatorsEma/1.0.0": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    }
+  }
+}
