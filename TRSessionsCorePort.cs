@@ -164,6 +164,7 @@ namespace CustomIndicators
         private readonly List<decimal> _closedDailyTrueRanges = new();
         private readonly List<VectorZone> _vectorZonesAbove = new();
         private readonly List<VectorZone> _vectorZonesBelow = new();
+        private readonly List<Color> _pvsraComputedColors = new();
         private int _lastProcessedBar = -1;
         private int _lastVectorAlertBar = -1;
         private int _lastVectorZoneCreationBar = -1;
@@ -248,6 +249,9 @@ namespace CustomIndicators
         private bool _vectorZoneColorOverride = true;
         private Color _vectorZoneColor = Color.FromArgb(26, 255, 230, 75);
         private int _vectorZoneTransparency = 90;
+        private bool _showPvsraVolumeHistogram;
+        private int _pvsraVolumeHistogramHeightPercent = 15;
+        private int _pvsraVolumeHistogramOpacityPercent = 70;
 
         private bool _showPreviousDayLevels = true;
         private bool _showYDayToday = true;
@@ -318,6 +322,7 @@ namespace CustomIndicators
         private int _marketProfileHistoryDays = 1;
         private bool _marketProfileIncludeCurrentDay = true;
         private bool _marketProfileIgnoreSunday;
+        private string _marketProfileMergeGroups = string.Empty;
         private bool _marketProfileUseSessionFilter;
         private TimeSpan _marketProfileSessionOpen = new(9, 30, 0);
         private TimeSpan _marketProfileSessionClose = new(16, 0, 0);
@@ -610,6 +615,29 @@ namespace CustomIndicators
             set => SetAndRecalculate(ref _vectorZoneTransparency, Math.Clamp(value, 0, 100));
         }
 
+
+        [Display(Name = "Show PVSRA Volume Histogram", GroupName = GroupPvsra, Order = 190)]
+        public bool ShowPvsraVolumeHistogram
+        {
+            get => _showPvsraVolumeHistogram;
+            set => SetAndRecalculate(ref _showPvsraVolumeHistogram, value);
+        }
+
+        [Display(Name = "PVSRA Histogram Height %", GroupName = GroupPvsra, Order = 200)]
+        [Range(5, 50)]
+        public int PvsraVolumeHistogramHeightPercent
+        {
+            get => _pvsraVolumeHistogramHeightPercent;
+            set => SetAndRecalculate(ref _pvsraVolumeHistogramHeightPercent, Math.Clamp(value, 5, 50));
+        }
+
+        [Display(Name = "PVSRA Histogram Opacity %", GroupName = GroupPvsra, Order = 210)]
+        [Range(0, 100)]
+        public int PvsraVolumeHistogramOpacityPercent
+        {
+            get => _pvsraVolumeHistogramOpacityPercent;
+            set => SetAndRecalculate(ref _pvsraVolumeHistogramOpacityPercent, Math.Clamp(value, 0, 100));
+        }
         [Display(Name = "Show YDay Hi/Lo", GroupName = GroupYDay, Order = 10)]
         public bool ShowPreviousDayLevels
         {
@@ -1066,6 +1094,13 @@ namespace CustomIndicators
             set => SetAndRecalculate(ref _marketProfileIgnoreSunday, value);
         }
 
+
+        [Display(Name = "Merge Groups (e.g. 2-4;5-8)", GroupName = GroupVolume, Order = 57)]
+        public string MarketProfileMergeGroups
+        {
+            get => _marketProfileMergeGroups;
+            set => SetAndRecalculate(ref _marketProfileMergeGroups, value?.Trim() ?? string.Empty);
+        }
         [Display(Name = "Profile Direction", GroupName = GroupVolume, Order = 60)]
         public ProfileDirection MarketProfileDirectionMode
         {
@@ -1375,6 +1410,7 @@ namespace CustomIndicators
                 return;
 
             DrawVectorZones(context);
+            DrawPvsraVolumeHistogram(context);
 
             if (InstrumentInfo is null || !_showMarketProfile || _volumeProfiles.Count == 0)
                 return;
@@ -1557,6 +1593,59 @@ namespace CustomIndicators
             DrawVectorZoneList(context, _vectorZonesBelow, barWidth);
         }
 
+
+        private void DrawPvsraVolumeHistogram(RenderContext context)
+        {
+            if (!_showPvsraVolumeHistogram)
+                return;
+
+            var chart = ChartInfo;
+            if (chart?.PriceChartContainer is null || Container is null)
+                return;
+
+            var firstBar = Math.Max(0, FirstVisibleBarNumber);
+            var lastBar = Math.Min(LastVisibleBarNumber, CurrentBar - 1);
+            if (lastBar < firstBar)
+                return;
+
+            decimal maxVolume = 0m;
+            for (var i = firstBar; i <= lastBar; i++)
+            {
+                var volume = GetCandle(i).Volume;
+                if (volume > maxVolume)
+                    maxVolume = volume;
+            }
+
+            if (maxVolume <= 0m)
+                return;
+
+            var barsWidth = Math.Max(1, (int)Math.Round(chart.PriceChartContainer.BarsWidth));
+            var maxHeight = Container.Region.Height * Math.Clamp(_pvsraVolumeHistogramHeightPercent, 5, 50) / 100;
+
+            for (var i = firstBar; i <= lastBar; i++)
+            {
+                var candle = GetCandle(i);
+                var volume = candle.Volume;
+                var barHeight = (int)Math.Round((double)(maxHeight * volume / maxVolume));
+                if (barHeight <= 0)
+                    continue;
+
+                var baseColor = i < _pvsraComputedColors.Count
+                    ? _pvsraComputedColors[i]
+                    : (candle.Close >= candle.Open ? _regularUpColor : _regularDownColor);
+
+                var color = ApplyOpacity(baseColor, _pvsraVolumeHistogramOpacityPercent);
+                var x = chart.GetXByBar(i, false);
+                var y = Container.Region.Bottom - barHeight;
+                context.FillRectangle(color, new Rectangle(x, y, barsWidth, barHeight));
+            }
+        }
+
+        private void EnsurePvsraColorBuffer(int bar)
+        {
+            while (_pvsraComputedColors.Count <= bar)
+                _pvsraComputedColors.Add(_regularDownColor);
+        }
         private void DrawVectorZoneList(RenderContext context, List<VectorZone> zones, int barWidth)
         {
             if (zones.Count == 0)
@@ -1660,6 +1749,7 @@ namespace CustomIndicators
             _volumeProfiles.Clear();
             _vectorZonesAbove.Clear();
             _vectorZonesBelow.Clear();
+            _pvsraComputedColors.Clear();
 
             ApplySeriesStyles();
         }
@@ -1841,6 +1931,7 @@ namespace CustomIndicators
             var endBar = bar;
             var created = 0;
             var latestDate = GetCandle(bar).Time.Date;
+            var dayRanges = new List<(DateTime Date, int StartBar, int EndBar)>();
 
             while (endBar >= 0 && created < profileDays)
             {
@@ -1857,15 +1948,99 @@ namespace CustomIndicators
                     continue;
                 }
 
-                var profile = BuildDayVolumeProfile(date, startBar, endBar);
-                if (profile.IsValid)
-                {
-                    _volumeProfiles.Add(profile);
-                    created++;
-                }
-
+                dayRanges.Add((date, startBar, endBar));
+                created++;
                 endBar = startBar - 1;
             }
+
+            foreach (var range in BuildMergedProfileRanges(dayRanges))
+            {
+                var profile = BuildDayVolumeProfile(range.Date, range.StartBar, range.EndBar);
+                if (profile.IsValid)
+                    _volumeProfiles.Add(profile);
+            }
+        }
+
+        private List<(DateTime Date, int StartBar, int EndBar)> BuildMergedProfileRanges(List<(DateTime Date, int StartBar, int EndBar)> dayRanges)
+        {
+            var result = new List<(DateTime Date, int StartBar, int EndBar)>();
+            var count = dayRanges.Count;
+            if (count == 0)
+                return result;
+
+            var groups = ParseMergeGroups(_marketProfileMergeGroups, count);
+            var assigned = new bool[count];
+
+            foreach (var group in groups)
+            {
+                var from = Math.Clamp(group.From, 1, count);
+                var to = Math.Clamp(group.To, 1, count);
+                if (from > to)
+                    (from, to) = (to, from);
+
+                var overlap = false;
+                for (var i = from; i <= to; i++)
+                {
+                    if (assigned[i - 1])
+                    {
+                        overlap = true;
+                        break;
+                    }
+                }
+
+                if (overlap)
+                    continue;
+
+                var newest = dayRanges[from - 1];
+                var oldest = dayRanges[to - 1];
+                result.Add((newest.Date, oldest.StartBar, newest.EndBar));
+
+                for (var i = from; i <= to; i++)
+                    assigned[i - 1] = true;
+            }
+
+            for (var i = 0; i < count; i++)
+            {
+                if (!assigned[i])
+                    result.Add(dayRanges[i]);
+            }
+
+            result.Sort((a, b) => b.EndBar.CompareTo(a.EndBar));
+            return result;
+        }
+
+        private static List<(int From, int To)> ParseMergeGroups(string text, int maxIndex)
+        {
+            var result = new List<(int From, int To)>();
+            if (string.IsNullOrWhiteSpace(text) || maxIndex <= 0)
+                return result;
+
+            var tokens = text.Replace(" ", string.Empty)
+                .Split(new[] { ';', ',' }, StringSplitOptions.RemoveEmptyEntries);
+
+            foreach (var token in tokens)
+            {
+                if (token.Contains('-'))
+                {
+                    var parts = token.Split('-', 2, StringSplitOptions.RemoveEmptyEntries);
+                    if (parts.Length != 2)
+                        continue;
+
+                    if (!int.TryParse(parts[0], out var from) || !int.TryParse(parts[1], out var to))
+                        continue;
+
+                    result.Add((from, to));
+                }
+                else
+                {
+                    if (!int.TryParse(token, out var dayIndex))
+                        continue;
+
+                    result.Add((dayIndex, dayIndex));
+                }
+            }
+
+            return result;
         }
 
         private DayVolumeProfile BuildDayVolumeProfile(DateTime date, int startBar, int endBar)
@@ -2085,6 +2260,8 @@ namespace CustomIndicators
             }
 
             _pvsraBars[bar] = _showPvsraCandles ? color.Convert() : null;
+            EnsurePvsraColorBuffer(bar);
+            _pvsraComputedColors[bar] = color;
             UpdateVectorZones(bar, candle, hasAverage && (isVector || isBlueViolet), isBull, color);
 
             if (isVector)
