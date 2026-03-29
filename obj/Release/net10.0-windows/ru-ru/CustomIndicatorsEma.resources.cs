@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("CustomIndicatorsEma")]
 [assembly: System.Reflection.AssemblyCopyrightAttribute(" ")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+e29153c9c2980893b270d154c6d19bf460c08373")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+3481f67e1cbff61aa092c606bac77ea77f5f72c7")]
 [assembly: System.Reflection.AssemblyProductAttribute("CustomIndicatorsEma")]
 [assembly: System.Reflection.AssemblyTitleAttribute("CustomIndicatorsEma")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
